@@ -1,28 +1,22 @@
 import fastify from "fastify";
-import { z } from "zod";
-import { prisma } from "./lib/prisma";
+import {
+  serializerCompiler,
+  validatorCompiler,
+} from "fastify-type-provider-zod";
+import { createEventRoute } from "./routes/create-event";
+import { getAttendeeBadgeRoute } from "./routes/get-attendee-badge";
+import { getEventRoute } from "./routes/get-event";
+import { registerForEventRoute } from "./routes/register-for-event";
 
 const app = fastify();
 
-const createEventSchema = z.object({
-  title: z.string(),
-  details: z.string().nullish(),
-  maximumAttendees: z.number().int().nullish(),
-});
+app.setValidatorCompiler(validatorCompiler);
+app.setSerializerCompiler(serializerCompiler);
 
-app.post("/events", async (request, response) => {
-  const data = createEventSchema.parse(request.body);
-
-  const event = await prisma.event.create({
-    data: {
-      ...data,
-      slug: crypto.randomUUID(),
-    },
-  });
-
-  response.status(201);
-  return event;
-});
+app.register(getEventRoute);
+app.register(createEventRoute);
+app.register(registerForEventRoute);
+app.register(getAttendeeBadgeRoute);
 
 const port = 3333;
 await app.listen({ port });
