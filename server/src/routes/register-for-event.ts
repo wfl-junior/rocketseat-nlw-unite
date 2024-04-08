@@ -3,12 +3,19 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
+import { conflictResponseSchema } from "../validation/conflict-response";
+import { notFoundResponseSchema } from "../validation/not-found-response";
+import { unprocessableEntityResponseSchema } from "../validation/unprocessable-entity-response";
+import { ConflictError } from "./errors/conflict";
+import { NotFoundError } from "./errors/not-found";
 
 export async function registerForEventRoute(app: FastifyInstance) {
   app.withTypeProvider<ZodTypeProvider>().post(
     "/events/:eventId/attendees",
     {
       schema: {
+        summary: "Register an attendee",
+        tags: ["attendees"],
         body: z.object({
           name: z.string().min(4),
           email: z.string().email(),
@@ -20,12 +27,9 @@ export async function registerForEventRoute(app: FastifyInstance) {
           201: z.object({
             attendeeId: z.number().int(),
           }),
-          404: z.object({
-            message: z.string(),
-          }),
-          409: z.object({
-            message: z.string(),
-          }),
+          404: notFoundResponseSchema,
+          409: conflictResponseSchema,
+          422: unprocessableEntityResponseSchema,
         },
       },
     },
@@ -49,16 +53,14 @@ export async function registerForEventRoute(app: FastifyInstance) {
         });
 
         if (!event) {
-          return response.status(404).send({ message: "Event not found" });
+          throw new NotFoundError("Event not found");
         }
 
         if (
           typeof event.maximumAttendees === "number" &&
           event._count.attendees >= event.maximumAttendees
         ) {
-          return response.status(409).send({
-            message: "This event is full",
-          });
+          throw new ConflictError("This event is full");
         }
 
         const attendee = await prisma.attendee.create({
@@ -76,9 +78,7 @@ export async function registerForEventRoute(app: FastifyInstance) {
           error instanceof PrismaClientKnownRequestError &&
           error.code === "P2002"
         ) {
-          return response.status(409).send({
-            message: "E-mail already registered to this event",
-          });
+          throw new ConflictError("E-mail already registered to this event");
         }
 
         throw error;
